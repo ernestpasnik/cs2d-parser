@@ -2,7 +2,7 @@
 
 **Parse and export CS2D stats in multiple formats: HTML, JSON, CSV, Markdown, or XML.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)[![Release](https://github.com/ernestpasnik/cs2d-parser/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/ernestpasnik/cs2d-parser/actions/workflows/rust.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Release](https://github.com/ernestpasnik/cs2d-parser/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/ernestpasnik/cs2d-parser/actions/workflows/rust.yml)
 
 ---
 
