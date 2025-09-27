@@ -8,65 +8,48 @@ on:
 permissions:
   contents: write
 
-env:
-  CARGO_TERM_COLOR: always
-  BIN_NAME: cs2d-parser
-
 jobs:
   build-and-upload:
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
       matrix:
         include:
           # Linux
           - build: linux-x86_64
             os: ubuntu-latest
             target: x86_64-unknown-linux-musl
-            artifact_name: cs2d-parser-linux-x86_64
           - build: linux-i686
             os: ubuntu-latest
             target: i686-unknown-linux-gnu
-            artifact_name: cs2d-parser-linux-i686
           - build: linux-aarch64
             os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            artifact_name: cs2d-parser-linux-aarch64
 
           # Windows
           - build: windows-x86_64
             os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact_name: cs2d-parser-windows-x86_64.exe
           - build: windows-i686
             os: windows-latest
             target: i686-pc-windows-msvc
-            artifact_name: cs2d-parser-windows-i686.exe
           - build: windows-aarch64
             os: windows-latest
             target: aarch64-pc-windows-msvc
-            artifact_name: cs2d-parser-windows-aarch64.exe
 
           # macOS
           - build: macos-x86_64
             os: macos-latest
             target: x86_64-apple-darwin
-            artifact_name: cs2d-parser-macos-x86_64
           - build: macos-aarch64
             os: macos-latest
             target: aarch64-apple-darwin
-            artifact_name: cs2d-parser-macos-aarch64
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Get version from tag
-        id: version
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Release version: $VERSION"
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -78,36 +61,36 @@ jobs:
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Prepare release directory
+      - name: Create release directory
         run: mkdir -p release
 
-      - name: Rename and move binary
-        shell: bash
+      - name: Move binary to release
         run: |
-          BINARY_NAME="${{ env.BIN_NAME }}$([[ "${{ matrix.os }}" == "windows-latest" ]] && echo '.exe')"
-          mv "target/${{ matrix.target }}/release/$BINARY_NAME" "release/${{ matrix.artifact_name }}"
-
-      - name: Generate SHA256 checksums
+          ext=""
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            ext=".exe"
+          fi
+          BIN_NAME="cs2d-parser-${{ matrix.build }}${ext}"
+          mv target/${{ matrix.target }}/release/cs2d-parser${ext} release/$BIN_NAME
         shell: bash
+
+      - name: Generate SHA256 checksum
         run: |
           cd release
-          sha256sum * > checksums.txt
+          > checksums.txt
+          for f in cs2d-parser-*; do
+            sha256sum "$f" >> checksums.txt
+          done
           sort -o checksums.txt checksums.txt
-          cat checksums.txt
+        shell: bash
 
       - name: List release files
-        run: ls -lh release
+        run: ls -l release
 
       - name: Upload binaries and checksums to GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: ${{ steps.version.outputs.version }}
-          name: Release ${{ steps.version.outputs.version }}
-          body: |
-            **Changelog for ${{ steps.version.outputs.version }}**
-            - [See commits](https://github.com/ernestpasnik/cs2d-parser/compare/${{ github.event.before }}...${{ github.ref }})
-          files: |
-            release/*
-          generate_release_notes: true
-          fail_on_unmatched_files: true
+          tag: ${{ github.ref }}
+          file: ./release/*
+          file_glob: true
