@@ -8,48 +8,65 @@ on:
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: always
+  BIN_NAME: cs2d-parser
+
 jobs:
   build-and-upload:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           # Linux
-          - build: linux-64bit
+          - build: linux-x86_64
             os: ubuntu-latest
             target: x86_64-unknown-linux-musl
-          - build: linux-32bit
+            artifact_name: ${{ env.BIN_NAME }}-linux-x86_64
+          - build: linux-i686
             os: ubuntu-latest
             target: i686-unknown-linux-gnu
-          - build: linux-arm64
+            artifact_name: ${{ env.BIN_NAME }}-linux-i686
+          - build: linux-aarch64
             os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
+            artifact_name: ${{ env.BIN_NAME }}-linux-aarch64
 
           # Windows
-          - build: windows-64bit
+          - build: windows-x86_64
             os: windows-latest
             target: x86_64-pc-windows-msvc
-          - build: windows-32bit
+            artifact_name: ${{ env.BIN_NAME }}-windows-x86_64.exe
+          - build: windows-i686
             os: windows-latest
             target: i686-pc-windows-msvc
-          - build: windows-arm64
+            artifact_name: ${{ env.BIN_NAME }}-windows-i686.exe
+          - build: windows-aarch64
             os: windows-latest
             target: aarch64-pc-windows-msvc
+            artifact_name: ${{ env.BIN_NAME }}-windows-aarch64.exe
 
           # macOS
-          - build: macos-64bit
+          - build: macos-x86_64
             os: macos-latest
             target: x86_64-apple-darwin
-          - build: macos-arm64
+            artifact_name: ${{ env.BIN_NAME }}-macos-x86_64
+          - build: macos-aarch64
             os: macos-latest
             target: aarch64-apple-darwin
+            artifact_name: ${{ env.BIN_NAME }}-macos-aarch64
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Get version from tag
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
 
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -61,36 +78,35 @@ jobs:
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Create release directory
+      - name: Prepare release directory
         run: mkdir -p release
 
-      - name: Move binary to release
-        run: |
-          ext=""
-          if [[ "${{ matrix.build }}" == windows-* ]]; then
-            ext=".exe"
-          fi
-          BIN_NAME="cs2d-stats-parser-${{ matrix.build }}${ext}"
-          mv target/${{ matrix.target }}/release/cs2d-stats-parser${ext} release/$BIN_NAME
+      - name: Rename and move binary
         shell: bash
+        run: |
+          mv "target/${{ matrix.target }}/release/${{ env.BIN_NAME }}"{${{ matrix.os == 'windows-latest' && '.exe' || '' }},"" } "release/${{ matrix.artifact_name }}"
 
-      - name: Generate SHA256 checksum
+      - name: Generate SHA256 checksums
+        shell: bash
         run: |
           cd release
-          > checksums.txt
-          for f in cs2d-stats-parser-*; do
-            sha256sum "$f" >> checksums.txt
-          done
+          sha256sum * > checksums.txt
           sort -o checksums.txt checksums.txt
-        shell: bash
+          cat checksums.txt
 
       - name: List release files
-        run: ls -l release
+        run: ls -lh release
 
       - name: Upload binaries and checksums to GitHub Release
-        uses: svenstaro/upload-release-action@v2
+        uses: softprops/action-gh-release@v1
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref }}
-          file: ./release/*
-          file_glob: true
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
+          body: |
+            **Changelog for ${{ steps.version.outputs.version }}**
+            - [See commits](https://github.com/ernestpasnik/cs2d-parser/compare/${{ github.event.before }}...${{ github.ref }})
+          files: |
+            release/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
